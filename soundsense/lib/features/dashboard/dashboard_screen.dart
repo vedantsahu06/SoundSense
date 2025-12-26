@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../shared/widgets/sound_card.dart';
 import '../../core/models/detected_sound.dart';
 import '../../core/services/haptic_service.dart';
+import '../../core/services/audio_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -11,6 +12,9 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  final AudioService _audioService = AudioService();
+  bool _isListening = false;
+
   // Demo sounds for testing UI
   final List<DetectedSound> _detectedSounds = [
     DetectedSound(
@@ -36,9 +40,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   ];
 
+  void _toggleListening() async {
+    if (_isListening) {
+      _audioService.stopListening();
+      setState(() {
+        _isListening = false;
+      });
+    } else {
+      try {
+        await _audioService.startListening();
+        setState(() {
+          _isListening = true;
+        });
+      } catch (e) {
+        // Show error if permission denied
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission denied'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   void _onSoundTap(DetectedSound sound) {
     HapticService.vibrate(sound.priority);
-    // Show details when user taps a sound
+
     showModalBottomSheet(
       context: context,
       backgroundColor: const Color(0xFF16213E),
@@ -76,14 +104,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            label,
-            style: TextStyle(color: Colors.grey[400], fontSize: 16),
-          ),
-          Text(
-            value,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-          ),
+          Text(label, style: TextStyle(color: Colors.grey[400], fontSize: 16)),
+          Text(value, style: const TextStyle(color: Colors.white, fontSize: 16)),
         ],
       ),
     );
@@ -100,10 +122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: const Text(
           'SoundSense',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: Colors.white,
-          ),
+          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         backgroundColor: const Color(0xFF16213E),
         centerTitle: true,
@@ -116,26 +135,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: Column(
         children: [
-          // Listening Status
+          // Listening Status & Toggle Button
           Container(
             padding: const EdgeInsets.all(20),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Column(
               children: [
-                Container(
-                  width: 12,
-                  height: 12,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF2ED573),
-                    shape: BoxShape.circle,
-                  ),
+                // Status
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: _isListening
+                            ? const Color(0xFF2ED573)
+                            : Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _isListening ? 'Listening...' : 'Not Listening',
+                      style: const TextStyle(color: Colors.white, fontSize: 18),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                const Text(
-                  'Listening...',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
+                const SizedBox(height: 16),
+                // Toggle Button
+                GestureDetector(
+                  onTap: _toggleListening,
+                  child: Container(
+                    width: 80,
+                    height: 80,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: _isListening
+                          ? const Color(0xFFFF4757)
+                          : const Color(0xFF2ED573),
+                    ),
+                    child: Icon(
+                      _isListening ? Icons.mic_off : Icons.mic,
+                      color: Colors.white,
+                      size: 36,
+                    ),
                   ),
                 ),
               ],
