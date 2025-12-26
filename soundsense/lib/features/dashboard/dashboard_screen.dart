@@ -14,6 +14,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final AudioService _audioService = AudioService();
   bool _isListening = false;
+  double _currentDecibel = 0;
 
   // Demo sounds for testing UI
   final List<DetectedSound> _detectedSounds = [
@@ -40,11 +41,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     ),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    // Listen to audio levels
+    _audioService.onNoiseLevel = (double decibel) {
+      setState(() {
+        _currentDecibel = decibel;
+      });
+    };
+  }
+
+  @override
+  void dispose() {
+    _audioService.dispose();
+    super.dispose();
+  }
+
   void _toggleListening() async {
     if (_isListening) {
       _audioService.stopListening();
       setState(() {
         _isListening = false;
+        _currentDecibel = 0;
       });
     } else {
       try {
@@ -53,7 +72,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _isListening = true;
         });
       } catch (e) {
-        // Show error if permission denied
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Microphone permission denied'),
@@ -115,6 +133,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
   }
 
+  Color _getDecibelColor() {
+    if (_currentDecibel > 80) return const Color(0xFFFF4757); // Red - Loud
+    if (_currentDecibel > 60) return const Color(0xFFFFA502); // Orange - Medium
+    return const Color(0xFF2ED573); // Green - Quiet
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -135,7 +159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       body: Column(
         children: [
-          // Listening Status & Toggle Button
+          // Listening Status & Audio Level
           Container(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -162,6 +186,41 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                
+                // Decibel Display
+                if (_isListening) ...[
+                  Text(
+                    '${_currentDecibel.toStringAsFixed(1)} dB',
+                    style: TextStyle(
+                      color: _getDecibelColor(),
+                      fontSize: 48,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Audio Level Bar
+                  Container(
+                    width: double.infinity,
+                    height: 10,
+                    margin: const EdgeInsets.symmetric(horizontal: 40),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                    child: FractionallySizedBox(
+                      alignment: Alignment.centerLeft,
+                      widthFactor: (_currentDecibel / 100).clamp(0.0, 1.0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: _getDecibelColor(),
+                          borderRadius: BorderRadius.circular(5),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                
                 // Toggle Button
                 GestureDetector(
                   onTap: _toggleListening,
