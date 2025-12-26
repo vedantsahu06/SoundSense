@@ -1,19 +1,24 @@
 import 'dart:async';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:noise_meter/noise_meter.dart';
+import 'package:audio_streamer/audio_streamer.dart';
 
 class AudioService {
   bool _isListening = false;
   NoiseMeter? _noiseMeter;
+  AudioStreamer? _audioStreamer;
   StreamSubscription<NoiseReading>? _noiseSubscription;
+  StreamSubscription<List<double>>? _audioSubscription;
   
-  // Callback for when noise level changes
+  // Callbacks
   Function(double decibel)? onNoiseLevel;
+  Function(List<double> audioData)? onAudioData;
   
   bool get isListening => _isListening;
 
   AudioService() {
     _noiseMeter = NoiseMeter();
+    _audioStreamer = AudioStreamer();
   }
 
   // Request microphone permission
@@ -35,15 +40,27 @@ class AudioService {
       throw Exception('Microphone permission denied');
     }
 
+    // Start noise meter (for decibel display)
     _noiseSubscription = _noiseMeter?.noise.listen(
       (NoiseReading reading) {
-        // Send decibel level to callback
         if (onNoiseLevel != null) {
           onNoiseLevel!(reading.meanDecibel);
         }
       },
       onError: (error) {
         print('Noise meter error: $error');
+      },
+    );
+
+    // Start audio streamer (for AI classification)
+    _audioSubscription = _audioStreamer?.audioStream.listen(
+      (List<double> audioData) {
+        if (onAudioData != null) {
+          onAudioData!(audioData);
+        }
+      },
+      onError: (error) {
+        print('Audio streamer error: $error');
       },
     );
 
@@ -54,6 +71,8 @@ class AudioService {
   void stopListening() {
     _noiseSubscription?.cancel();
     _noiseSubscription = null;
+    _audioSubscription?.cancel();
+    _audioSubscription = null;
     _isListening = false;
   }
 

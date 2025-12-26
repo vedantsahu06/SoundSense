@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../shared/widgets/sound_card.dart';
 import '../../core/models/detected_sound.dart';
+import '../../core/models/sound_category.dart';
 import '../../core/services/haptic_service.dart';
 import '../../core/services/audio_service.dart';
+import '../../core/services/sound_classifier.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -13,48 +15,114 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final AudioService _audioService = AudioService();
+  final SoundClassifier _classifier = SoundClassifier();
+  
   bool _isListening = false;
+  bool _isModelLoaded = false;
   double _currentDecibel = 0;
-
-  // Demo sounds for testing UI
-  final List<DetectedSound> _detectedSounds = [
-    DetectedSound(
-      name: 'Car Horn',
-      category: 'Traffic',
-      confidence: 0.92,
-      timestamp: DateTime.now(),
-      priority: 'critical',
-    ),
-    DetectedSound(
-      name: 'Dog Bark',
-      category: 'Animal',
-      confidence: 0.85,
-      timestamp: DateTime.now(),
-      priority: 'important',
-    ),
-    DetectedSound(
-      name: 'Music',
-      category: 'Entertainment',
-      confidence: 0.78,
-      timestamp: DateTime.now(),
-      priority: 'normal',
-    ),
-  ];
+  List<DetectedSound> _detectedSounds = [];
+  List<double> _audioBuffer = [];
 
   @override
   void initState() {
     super.initState();
-    // Listen to audio levels
+    _initializeClassifier();
+    _setupAudioCallbacks();
+  }
+
+  Future<void> _initializeClassifier() async {
+    await _classifier.initialize();
+    setState(() {
+      _isModelLoaded = _classifier.isReady;
+    });
+    if (_isModelLoaded) {
+      print('AI Model loaded successfully!');
+    } else {
+      print('Failed to load AI model');
+    }
+  }
+
+  void _setupAudioCallbacks() {
+    // Listen to decibel levels
     _audioService.onNoiseLevel = (double decibel) {
       setState(() {
         _currentDecibel = decibel;
       });
     };
+
+    // Listen to raw audio data
+    _audioService.onAudioData = (List<double> audioData) {
+      _audioBuffer.addAll(audioData);
+      
+      // YAMNet needs ~15600 samples (about 1 second at 16kHz)
+      if (_audioBuffer.length >= 15600) {
+        _classifyAudio();
+      }
+    };
+  }
+
+  Future<void> _classifyAudio() async {
+    if (!_isModelLoaded || _audioBuffer.length < 15600) return;
+
+    // Take 15600 samples for classification
+    final samples = _audioBuffer.sublist(0, 15600);
+    _audioBuffer = _audioBuffer.sublist(15600);
+
+    // Run AI classification
+    final results = await _classifier.classify(samples);
+
+    if (results.isNotEmpty) {
+      setState(() {
+        // Add new detected sounds
+        for (var result in results) {
+          final priority = SoundCategory.getPriority(result.label);
+          
+          // Vibrate for important sounds
+          if (priority == 'critical' || priority == 'important') {
+            HapticService.vibrate(priority);
+          }
+
+          // Add to list (avoid duplicates)
+          final exists = _detectedSounds.any((s) => s.name == result.label);
+          if (!exists) {
+            _detectedSounds.insert(0, DetectedSound(
+              name: result.label,
+              category: _getCategoryForSound(result.label),
+              confidence: result.confidence,
+              timestamp: DateTime.now(),
+              priority: priority,
+            ));
+          }
+        }
+
+        // Keep only last 10 sounds
+        if (_detectedSounds.length > 10) {
+          _detectedSounds = _detectedSounds.sublist(0, 10);
+        }
+      });
+    }
+  }
+
+  String _getCategoryForSound(String soundName) {
+    final lower = soundName.toLowerCase();
+    if (lower.contains('car') || lower.contains('horn') || lower.contains('siren')) {
+      return 'Traffic';
+    } else if (lower.contains('dog') || lower.contains('cat') || lower.contains('bird')) {
+      return 'Animal';
+    } else if (lower.contains('music') || lower.contains('singing')) {
+      return 'Music';
+    } else if (lower.contains('speech') || lower.contains('talk')) {
+      return 'Speech';
+    } else if (lower.contains('door') || lower.contains('knock')) {
+      return 'Home';
+    }
+    return 'Other';
   }
 
   @override
   void dispose() {
     _audioService.dispose();
+    _classifier.dispose();
     super.dispose();
   }
 
@@ -134,9 +202,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Color _getDecibelColor() {
-    if (_currentDecibel > 80) return const Color(0xFFFF4757); // Red - Loud
-    if (_currentDecibel > 60) return const Color(0xFFFFA502); // Orange - Medium
-    return const Color(0xFF2ED573); // Green - Quiet
+    if (_currentDecibel > 80) return const Color(0xFFFF4757);
+    if (_currentDecibel > 60) return const Color(0xFFFFA502);
+    return const Color(0xFF2ED573);
   }
 
   @override
@@ -151,9 +219,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF16213E),
         centerTitle: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () {},
+          // AI Status indicator
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Icon(
+              _isModelLoaded ? Icons.psychology : Icons.psychology_outlined,
+              color: _isModelLoaded ? const Color(0xFF2ED573) : Colors.grey,
+            ),
           ),
         ],
       ),
@@ -164,6 +236,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.all(20),
             child: Column(
               children: [
+                // AI Status
+                if (!_isModelLoaded)
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Loading AI Model...',
+                          style: TextStyle(color: Colors.orange),
+                        ),
+                      ],
+                    ),
+                  ),
+                
                 // Status
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -198,7 +296,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Audio Level Bar
                   Container(
                     width: double.infinity,
                     height: 10,
@@ -243,13 +340,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+          
+          // Detected Sounds Header
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              children: [
+                const Text(
+                  'Detected Sounds',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                if (_detectedSounds.isNotEmpty)
+                  TextButton(
+                    onPressed: () {
+                      setState(() {
+                        _detectedSounds.clear();
+                      });
+                    },
+                    child: const Text('Clear All'),
+                  ),
+              ],
+            ),
+          ),
+          
           // Sound Cards List
           Expanded(
             child: _detectedSounds.isEmpty
-                ? const Center(
+                ? Center(
                     child: Text(
-                      'No sounds detected',
-                      style: TextStyle(color: Colors.grey),
+                      _isListening 
+                          ? 'Listening for sounds...' 
+                          : 'Tap mic to start',
+                      style: const TextStyle(color: Colors.grey),
                     ),
                   )
                 : ListView.builder(
