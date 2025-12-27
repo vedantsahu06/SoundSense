@@ -39,6 +39,7 @@ dependencies:
   noise_meter: ^5.0.2
   tflite_flutter: ^0.11.0
   audio_streamer: ^4.2.2
+  http: ^1.2.1
   
 
 dev_dependencies:

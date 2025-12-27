@@ -5,6 +5,7 @@ import '../../core/models/sound_category.dart';
 import '../../core/services/haptic_service.dart';
 import '../../core/services/audio_service.dart';
 import '../../core/services/sound_classifier.dart';
+import '../chat/chat_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -219,6 +220,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         backgroundColor: const Color(0xFF16213E),
         centerTitle: true,
         actions: [
+           IconButton(
+    icon: const Icon(Icons.chat, color: Colors.white),
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => ChatScreen(
+            recentSounds: _detectedSounds.map((s) => s.name).toList(),
+          ),
+        ),
+      );
+    },
+  ),
           // AI Status indicator
           Padding(
             padding: const EdgeInsets.only(right: 16),
