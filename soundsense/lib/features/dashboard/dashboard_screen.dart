@@ -15,6 +15,12 @@ import '../../shared/widgets/sound_animation.dart';
 import '../../shared/widgets/critical_alerts.dart';
 import '../../core/services/animation_service.dart';
 import '../../shared/widgets/sound_grid.dart';
+import '../training/sound_training_screen.dart';
+import '../training/voice_training_screen.dart';
+import '../transcription/enhanced_transcription_screen.dart';
+import '../../core/services/custom_sound_service.dart';
+import 'dart:typed_data';
+import '../../core/services/training_database.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -41,8 +47,19 @@ bool _showCriticalAlert = false;
     super.initState();
     _initializeClassifier();
     _setupAudioCallbacks();
+    _checkCustomSounds();
   }
 
+Future<void> _checkCustomSounds() async {
+  final customSoundService = CustomSoundService.instance;
+  await customSoundService.initialize();
+  
+  // Clear old bad data - REMOVE AFTER ONE RUN
+  await TrainingDatabase.instance.clearAllData();
+  print('🗑️ Cleared old data!');
+  
+  print('🔊 Custom sounds saved: ${customSoundService.customSounds.length}');
+}
   Future<void> _initializeClassifier() async {
     await _classifier.initialize();
     setState(() {
@@ -78,9 +95,33 @@ Future<void> _classifyAudio() async {
 
   final samples = _audioBuffer.sublist(0, 15600);
   _audioBuffer = _audioBuffer.sublist(15600);
+  final audioBytes = _samplesToBytes(samples);
 
-  final results = await _classifier.classify(samples);
-
+  
+   final customMatch = await CustomSoundService.instance.detectCustomSound(audioBytes);
+  if (customMatch != null) {
+    print('🎯 Custom sound detected: ${customMatch.displayName} (${customMatch.confidencePercent}%)');
+    
+    final customDetected = DetectedSound(
+      name: '⭐ ${customMatch.displayName}',
+      category: customMatch.sound.category,
+      confidence: customMatch.confidence,
+      timestamp: DateTime.now(),
+      priority: 'important',
+    );
+    
+    setState(() {
+      _detectedSounds.insert(0, customDetected);
+      _currentSound = customDetected;
+      if (_detectedSounds.length > 10) {
+        _detectedSounds = _detectedSounds.sublist(0, 10);
+      }
+    });
+    
+    HapticService.vibrate('important');
+    return; // Skip YAMNet if custom sound found
+  }
+final results = await _classifier.classify(samples);
   if (results.isNotEmpty) {
     for (var result in results) {
       final priority = SoundCategory.getPriority(result.label);
@@ -121,6 +162,16 @@ Future<void> _classifyAudio() async {
       });
     }
   }
+}
+Uint8List _samplesToBytes(List<double> samples) {
+  final bytes = Uint8List(samples.length * 2);
+  for (int i = 0; i < samples.length; i++) {
+    int sample = (samples[i] * 32768).round().clamp(-32768, 32767);
+    if (sample < 0) sample += 65536;
+    bytes[i * 2] = sample & 0xFF;
+    bytes[i * 2 + 1] = (sample >> 8) & 0xFF;
+  }
+  return bytes;
 }
   String _getCategoryForSound(String soundName) {
     final lower = soundName.toLowerCase();
@@ -225,6 +276,41 @@ Future<void> _classifyAudio() async {
     if (_currentDecibel > 60) return const Color(0xFFFFA502);
     return const Color(0xFF2ED573);
   }
+  Widget _buildFeatureCard({
+  required IconData icon,
+  required String label,
+  required Color color,
+  required VoidCallback onTap,
+}) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 80,
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.2),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 6),
+          Text(
+            label,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
   @override
 Widget build(BuildContext context) {
@@ -251,7 +337,33 @@ Widget build(BuildContext context) {
       backgroundColor: const Color(0xFF16213E),
       centerTitle: true,
       actions: [
+         IconButton(
+    icon: const Icon(Icons.music_note, color: Colors.white),
+    tooltip: 'Train Sounds',
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const SoundTrainingScreen(),
+        ),
+      );
+    },
+  ),
+  // NEW: Voice Training
+  IconButton(
+    icon: const Icon(Icons.person_add, color: Colors.white),
+    tooltip: 'Voice Profiles',
+    onPressed: () {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const VoiceTrainingScreen(),
+        ),
+      );
+    },
+  ),
         IconButton(
+          
           icon: const Icon(Icons.settings, color: Colors.white),
           onPressed: () {
             Navigator.push(
@@ -262,17 +374,17 @@ Widget build(BuildContext context) {
             );
           },
         ),
-        IconButton(
-          icon: const Icon(Icons.subtitles, color: Colors.white),
-          onPressed: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const TranscriptionScreen(),
-              ),
-            );
-          },
-        ),
+      IconButton(
+  icon: const Icon(Icons.subtitles, color: Colors.white),
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const EnhancedTranscriptionScreen(),
+      ),
+    );
+  },
+),
         IconButton(
           icon: const Icon(Icons.chat, color: Colors.white),
           onPressed: () {
@@ -420,6 +532,58 @@ Widget build(BuildContext context) {
                     .then()
                     .scale(begin: const Offset(1.1, 1.1), end: const Offset(1, 1)),
               ),
+              const SizedBox(height: 24),
+
+// Feature Cards Row
+Row(
+  mainAxisAlignment: MainAxisAlignment.center,
+  children: [
+    // Train Sounds Card
+    _buildFeatureCard(
+      icon: Icons.music_note,
+      label: 'Train\nSounds',
+      color: Colors.purple,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const SoundTrainingScreen(),
+          ),
+        );
+      },
+    ),
+    const SizedBox(width: 16),
+    // Voice Profiles Card
+    _buildFeatureCard(
+      icon: Icons.person_add,
+      label: 'Voice\nProfiles',
+      color: Colors.orange,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const VoiceTrainingScreen(),
+          ),
+        );
+      },
+    ),
+    const SizedBox(width: 16),
+    // Enhanced Captions Card
+    _buildFeatureCard(
+      icon: Icons.closed_caption,
+      label: 'Live\nCaptions',
+      color: Colors.cyan,
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const EnhancedTranscriptionScreen(),
+          ),
+        );
+      },
+    ),
+  ],
+),
             ],
           ),
         ),
