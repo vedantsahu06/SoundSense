@@ -235,12 +235,4 @@ Future<bool> addSample(Uint8List audioData) async {
     _collectedEmbeddings.clear();
     _isComplete = true;
   }
-
-  double _calculateEnergy(List<double> embedding) {
-    double sum = 0;
-    for (final value in embedding) {
-      sum += value * value;
-    }
-    return sum / embedding.length;
-  }
 }

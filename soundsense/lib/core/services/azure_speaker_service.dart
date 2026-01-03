@@ -26,6 +26,9 @@ class AzureSpeakerService {
         _region = EnvConfig.azureSpeechRegion,
         _baseUrl = 'https://${EnvConfig.azureSpeechRegion}.api.cognitive.microsoft.com';
 
+  /// Get the configured Azure region
+  String get region => _region;
+
   // ============================================================
   // SPEAKER IDENTIFICATION (Who is speaking?)
   // ============================================================

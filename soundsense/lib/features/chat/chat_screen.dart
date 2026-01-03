@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/services/chat_service.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -14,6 +16,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final ChatService _chatService = ChatService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
+  final FocusNode _focusNode = FocusNode();
   final List<ChatMessage> _messages = [];
   bool _isLoading = false;
 
@@ -21,17 +24,17 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     _chatService.updateRecentSounds(widget.recentSounds);
-    
-    // Welcome message
+
     _messages.add(ChatMessage(
-      text: "Hi! I'm your SoundSense assistant. I can help you understand sounds around you and answer questions. How can I help?",
+      text:
+          "Hi! 👋 I'm your SoundSense assistant powered by AI. I can help you understand sounds, answer questions about your environment, or just chat. How can I help you today?",
       isUser: false,
     ));
   }
 
   void _sendMessage() async {
     final text = _messageController.text.trim();
-    if (text.isEmpty) return;
+    if (text.isEmpty || _isLoading) return;
 
     setState(() {
       _messages.add(ChatMessage(text: text, isUser: true));
@@ -65,123 +68,73 @@ class _ChatScreenState extends State<ChatScreen> {
   void dispose() {
     _messageController.dispose();
     _scrollController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        title: const Text(
-          'SoundSense Assistant',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+      backgroundColor: AppTheme.backgroundPrimary,
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildHeader(),
+            if (widget.recentSounds.isNotEmpty) _buildSoundsBanner(),
+            Expanded(child: _buildMessagesList()),
+            _buildInputArea(),
+          ],
         ),
-        backgroundColor: const Color(0xFF16213E),
-        iconTheme: const IconThemeData(color: Colors.white),
-        centerTitle: true,
       ),
-      body: Column(
+    );
+  }
+
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      child: Row(
         children: [
-          // Recent sounds banner
-          if (widget.recentSounds.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(12),
-              color: const Color(0xFF16213E),
-              child: Row(
-                children: [
-                  const Icon(Icons.hearing, color: Color(0xFF2ED573), size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Recent sounds: ${widget.recentSounds.take(3).join(", ")}',
-                      style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          
-          // Chat messages
-          Expanded(
-            child: ListView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(16),
-              itemCount: _messages.length + (_isLoading ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index == _messages.length && _isLoading) {
-                  return const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                        SizedBox(width: 12),
-                        Text(
-                          'Thinking...',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    ),
-                  );
-                }
-                return _buildMessageBubble(_messages[index]);
-              },
-            ),
-          ),
-          
-          // Input field
           Container(
-            padding: const EdgeInsets.all(16),
-            color: const Color(0xFF16213E),
-            child: Row(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+            ),
+            child:
+                const Icon(Icons.smart_toy_rounded, color: Colors.white, size: 26),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _messageController,
-                    style: const TextStyle(color: Colors.white),
-                    decoration: InputDecoration(
-                      hintText: 'Ask about sounds...',
-                      hintStyle: TextStyle(color: Colors.grey[500]),
-                      filled: true,
-                      fillColor: const Color(0xFF1A1A2E),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(24),
-                        borderSide: BorderSide.none,
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
+                Text('AI Assistant', style: AppTheme.headlineLarge),
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.success,
+                        shape: BoxShape.circle,
                       ),
                     ),
-                    onSubmitted: (_) => _sendMessage(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                GestureDetector(
-                  onTap: _isLoading ? null : _sendMessage,
-                  child: Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: _isLoading
-                          ? Colors.grey
-                          : const Color(0xFF2ED573),
-                      shape: BoxShape.circle,
+                    const SizedBox(width: 6),
+                    Text(
+                      'Online • Gemini AI',
+                      style: AppTheme.bodySmall.copyWith(color: AppTheme.success),
                     ),
-                    child: const Icon(
-                      Icons.send,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
+                  ],
                 ),
               ],
+            ),
+          ),
+          IconButton(
+            onPressed: _clearChat,
+            icon: const Icon(Icons.refresh_rounded),
+            style: IconButton.styleFrom(
+              backgroundColor: AppTheme.backgroundSecondary,
             ),
           ),
         ],
@@ -189,43 +142,258 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _buildMessageBubble(ChatMessage message) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+  Widget _buildSoundsBanner() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppTheme.primary.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+        border: Border.all(color: AppTheme.primary.withOpacity(0.2)),
+      ),
       child: Row(
-        mainAxisAlignment:
-            message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
-          if (!message.isUser)
-            Container(
-              width: 32,
-              height: 32,
-              margin: const EdgeInsets.only(right: 8),
-              decoration: const BoxDecoration(
-                color: Color(0xFF2ED573),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.assistant, color: Colors.white, size: 18),
-            ),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: message.isUser
-                    ? const Color(0xFF2ED573)
-                    : const Color(0xFF16213E),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Text(
-                message.text,
-                style: const TextStyle(color: Colors.white, fontSize: 15),
-              ),
+          const Icon(Icons.hearing_rounded, color: AppTheme.primary, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'Recent: ${widget.recentSounds.take(3).join(", ")}',
+              style: AppTheme.bodySmall.copyWith(color: AppTheme.primary),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
-          if (message.isUser) const SizedBox(width: 40),
         ],
       ),
     );
+  }
+
+  Widget _buildMessagesList() {
+    return ListView.builder(
+      controller: _scrollController,
+      padding: const EdgeInsets.all(20),
+      itemCount: _messages.length + (_isLoading ? 1 : 0),
+      itemBuilder: (context, index) {
+        if (_isLoading && index == _messages.length) {
+          return _buildTypingIndicator();
+        }
+        return _buildMessageBubble(_messages[index], index);
+      },
+    );
+  }
+
+  Widget _buildMessageBubble(ChatMessage message, int index) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        mainAxisAlignment:
+            message.isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!message.isUser) ...[
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                gradient: AppTheme.primaryGradient,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.smart_toy_rounded,
+                  color: Colors.white, size: 18),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: message.isUser
+                    ? AppTheme.primary
+                    : AppTheme.backgroundSecondary,
+                borderRadius: BorderRadius.circular(AppTheme.radiusLG).copyWith(
+                  bottomLeft: message.isUser
+                      ? const Radius.circular(AppTheme.radiusLG)
+                      : const Radius.circular(4),
+                  bottomRight: message.isUser
+                      ? const Radius.circular(4)
+                      : const Radius.circular(AppTheme.radiusLG),
+                ),
+                border: message.isUser
+                    ? null
+                    : Border.all(color: AppTheme.borderMedium),
+              ),
+              child: Text(
+                message.text,
+                style: AppTheme.bodyLarge.copyWith(
+                  color: message.isUser ? Colors.white : AppTheme.textPrimary,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ),
+          if (message.isUser) ...[
+            const SizedBox(width: 10),
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppTheme.backgroundSecondary,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppTheme.borderMedium),
+              ),
+              child: const Icon(Icons.person_rounded,
+                  color: AppTheme.textSecondary, size: 18),
+            ),
+          ],
+        ],
+      ),
+    ).animate().fadeIn(duration: 200.ms).slideY(begin: 0.1);
+  }
+
+  Widget _buildTypingIndicator() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              gradient: AppTheme.primaryGradient,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.smart_toy_rounded,
+                color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: AppTheme.backgroundSecondary,
+              borderRadius:
+                  BorderRadius.circular(AppTheme.radiusLG).copyWith(
+                bottomLeft: const Radius.circular(4),
+              ),
+              border: Border.all(color: AppTheme.borderMedium),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: List.generate(
+                3,
+                (i) => Container(
+                  margin: EdgeInsets.only(right: i < 2 ? 4 : 0),
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary,
+                    shape: BoxShape.circle,
+                  ),
+                )
+                    .animate(onPlay: (c) => c.repeat())
+                    .fadeIn(delay: Duration(milliseconds: i * 200))
+                    .then()
+                    .fadeOut(delay: const Duration(milliseconds: 400)),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInputArea() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundSecondary,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundTertiary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusXL),
+                  border: Border.all(color: AppTheme.borderMedium),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        focusNode: _focusNode,
+                        style: AppTheme.bodyLarge,
+                        maxLines: null,
+                        textInputAction: TextInputAction.send,
+                        onSubmitted: (_) => _sendMessage(),
+                        decoration: InputDecoration(
+                          hintText: 'Ask me anything...',
+                          hintStyle: AppTheme.bodyMedium
+                              .copyWith(color: AppTheme.textTertiary),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                            vertical: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            GestureDetector(
+              onTap: _sendMessage,
+              child: Container(
+                width: 50,
+                height: 50,
+                decoration: BoxDecoration(
+                  gradient: AppTheme.primaryGradient,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppTheme.primary.withOpacity(0.3),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: _isLoading
+                    ? const Padding(
+                        padding: EdgeInsets.all(14),
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2,
+                        ),
+                      )
+                    : const Icon(Icons.send_rounded,
+                        color: Colors.white, size: 22),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _clearChat() {
+    setState(() {
+      _messages.clear();
+      _messages.add(ChatMessage(
+        text:
+            "Chat cleared! 🧹 I'm ready to help you with anything. What would you like to know?",
+        isUser: false,
+      ));
+    });
   }
 }
 

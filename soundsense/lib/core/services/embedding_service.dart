@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:typed_data';
 import 'package:tflite_flutter/tflite_flutter.dart';
 
@@ -345,10 +344,9 @@ class VoiceEmbeddingService {
   double _estimateSpectralCentroid(List<double> samples) {
     // Simplified spectral centroid estimation
     // In production, you'd use FFT
-    final energy = _calculateEnergy(samples);
     final zcr = _calculateZeroCrossingRate(samples);
     
-    // Rough estimate based on ZCR and energy
+    // Rough estimate based on ZCR
     return zcr * 16000 * 0.5; // Half of Nyquist * ZCR
   }
 

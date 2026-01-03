@@ -1,63 +1,70 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:record/record.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/services/azure_speech_service.dart';
 import '../../core/services/azure_speaker_service.dart';
 import '../../core/config/env_config.dart';
 
-/// Enhanced Transcription Screen with REAL Azure Speaker Identification
+/// Live Captions Screen with Real-time Speech-to-Text
 class EnhancedTranscriptionScreen extends StatefulWidget {
   const EnhancedTranscriptionScreen({super.key});
 
   @override
-  State<EnhancedTranscriptionScreen> createState() => _EnhancedTranscriptionScreenState();
+  State<EnhancedTranscriptionScreen> createState() =>
+      _EnhancedTranscriptionScreenState();
 }
 
-class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScreen> {
+class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScreen>
+    with TickerProviderStateMixin {
   // Services
   late AzureSpeechService _speechService;
   final AzureSpeakerService _speakerService = AzureSpeakerService.instance;
   final AudioRecorder _audioRecorder = AudioRecorder();
-  
+
   // State
   bool _isInitialized = false;
   bool _isListening = false;
   bool _isConnected = false;
   String _selectedLanguage = 'en-US';
-  
-  // Transcription with speakers
+
+  // Transcription
   final List<TranscriptEntry> _transcriptEntries = [];
   String _partialText = '';
   IdentificationResult? _currentSpeaker;
-  
+
   // Audio buffer for speaker identification
   List<int> _speakerAudioBuffer = [];
   Timer? _speakerIdentificationTimer;
-  
+
   // Streams
   StreamSubscription? _transcriptionSub;
   StreamSubscription? _partialSub;
   StreamSubscription? _connectionSub;
   StreamSubscription? _errorSub;
   StreamSubscription? _audioSub;
-  
+
   final ScrollController _scrollController = ScrollController();
-  
+  late AnimationController _pulseController;
+
   final List<Map<String, String>> _languages = [
-    {'code': 'en-US', 'name': 'English (US)'},
-    {'code': 'en-IN', 'name': 'English (India)'},
-    {'code': 'hi-IN', 'name': 'Hindi'},
-    {'code': 'ta-IN', 'name': 'Tamil'},
-    {'code': 'te-IN', 'name': 'Telugu'},
-    {'code': 'ml-IN', 'name': 'Malayalam'},
+    {'code': 'en-US', 'name': 'English (US)', 'flag': '🇺🇸'},
+    {'code': 'en-IN', 'name': 'English (India)', 'flag': '🇮🇳'},
+    {'code': 'hi-IN', 'name': 'Hindi', 'flag': '🇮🇳'},
+    {'code': 'es-ES', 'name': 'Spanish', 'flag': '🇪🇸'},
+    {'code': 'fr-FR', 'name': 'French', 'flag': '🇫🇷'},
+    {'code': 'de-DE', 'name': 'German', 'flag': '🇩🇪'},
   ];
 
   @override
   void initState() {
     super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
     _initialize();
   }
 
@@ -66,9 +73,9 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
       apiKey: EnvConfig.azureSpeechApiKey,
       region: EnvConfig.azureSpeechRegion,
     );
-    
-    // Subscribe to transcription
-    _transcriptionSub = _speechService.transcriptionStream.listen(_onTranscription);
+
+    _transcriptionSub =
+        _speechService.transcriptionStream.listen(_onTranscription);
     _partialSub = _speechService.partialStream.listen(_onPartialResult);
     _connectionSub = _speechService.connectionStream.listen((connected) {
       setState(() {
@@ -79,12 +86,13 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
     _errorSub = _speechService.errorStream.listen((error) {
       _showSnackbar(error, isError: true);
     });
-    
+
     setState(() => _isInitialized = true);
   }
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _transcriptionSub?.cancel();
     _partialSub?.cancel();
     _connectionSub?.cancel();
@@ -103,8 +111,7 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
 
   void _onTranscription(String fullText) {
     if (fullText.isEmpty) return;
-    
-    // Get the new text
+
     String newText = fullText;
     if (_transcriptEntries.isNotEmpty) {
       final lastFullText = _transcriptEntries.map((e) => e.text).join(' ');
@@ -112,9 +119,9 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
         newText = fullText.substring(lastFullText.length).trim();
       }
     }
-    
+
     if (newText.isEmpty) return;
-    
+
     setState(() {
       _transcriptEntries.add(TranscriptEntry(
         text: newText,
@@ -123,7 +130,7 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
       ));
       _partialText = '';
     });
-    
+
     _scrollToBottom();
   }
 
@@ -132,13 +139,11 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
   }
 
   // ============================================================
-  // REAL Azure Speaker Identification
+  // Speaker Identification
   // ============================================================
 
   void _startSpeakerIdentification() {
     _speakerAudioBuffer = [];
-    
-    // Identify speaker every 3 seconds
     _speakerIdentificationTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _identifyCurrentSpeaker(),
@@ -151,27 +156,21 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
   }
 
   Future<void> _identifyCurrentSpeaker() async {
-    if (_speakerAudioBuffer.length < 16000 * 2) return; // Need at least 1 second
-    
+    if (_speakerAudioBuffer.length < 16000 * 2) return;
+
     final audioData = Uint8List.fromList(_speakerAudioBuffer);
-    _speakerAudioBuffer = []; // Clear buffer
-    
-    // Call REAL Azure Speaker Recognition
+    _speakerAudioBuffer = [];
+
     final result = await _speakerService.identifySpeaker(audioData);
-    
+
     setState(() {
       _currentSpeaker = result;
     });
-    
-    if (result.identified) {
-      print('🎤 Identified: ${result.personName} (${result.confidencePercent}%)');
-    }
   }
 
   void _addAudioForSpeakerIdentification(List<int> audioData) {
     _speakerAudioBuffer.addAll(audioData);
-    
-    // Keep only last 3 seconds of audio
+
     const maxBufferSize = 16000 * 2 * 3;
     if (_speakerAudioBuffer.length > maxBufferSize) {
       _speakerAudioBuffer = _speakerAudioBuffer.sublist(
@@ -189,16 +188,16 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
       _showSnackbar('Microphone permission denied', isError: true);
       return;
     }
-    
+
     final connected = await _speechService.startTranscription(
       language: _selectedLanguage,
     );
-    
+
     if (!connected) {
-      _showSnackbar('Failed to connect', isError: true);
+      _showSnackbar('Failed to connect to Azure', isError: true);
       return;
     }
-    
+
     try {
       final stream = await _audioRecorder.startStream(
         RecordConfig(
@@ -207,20 +206,15 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
           numChannels: 1,
         ),
       );
-      
+
       setState(() => _isListening = true);
-      
-      // Start REAL Azure speaker identification
+
       _startSpeakerIdentification();
-      
+
       _audioSub = stream.listen((data) {
-        // Send to Azure for transcription
         _speechService.sendAudioData(Uint8List.fromList(data));
-        
-        // Also buffer for speaker identification
         _addAudioForSpeakerIdentification(data);
       });
-      
     } catch (e) {
       _showSnackbar('Failed to start: $e', isError: true);
       await _speechService.stopTranscription();
@@ -229,7 +223,7 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
 
   Future<void> _stopListening() async {
     setState(() => _isListening = false);
-    
+
     _stopSpeakerIdentification();
     await _audioSub?.cancel();
     await _audioRecorder.stop();
@@ -267,8 +261,8 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
   void _showSnackbar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.redAccent : Colors.green,
+        content: Text(message, style: AppTheme.bodyMedium),
+        backgroundColor: isError ? AppTheme.error : AppTheme.success,
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -281,134 +275,173 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E21),
-      appBar: _buildAppBar(),
+      backgroundColor: AppTheme.backgroundPrimary,
       body: !_isInitialized
           ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                _buildHeader(),
-                _buildLanguageSelector(),
-                Expanded(child: _buildTranscriptArea()),
-                _buildControlPanel(),
-              ],
+          : SafeArea(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  _buildStatusBar(),
+                  Expanded(child: _buildTranscriptArea()),
+                  _buildControlPanel(),
+                ],
+              ),
             ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar() {
-    return AppBar(
-      backgroundColor: Colors.transparent,
-      elevation: 0,
-      title: Row(
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Row(
         children: [
-          const Icon(Icons.closed_caption, color: Colors.cyanAccent),
-          const SizedBox(width: 8),
-          const Text(
-            'Live Captions',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              gradient: AppTheme.accentGradient,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+            ),
+            child:
+                const Icon(Icons.closed_caption_rounded, color: Colors.white),
           ),
-          if (_isListening) ...[
-            const SizedBox(width: 12),
-            _buildPulsingDot(),
-          ],
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Live Captions', style: AppTheme.headlineLarge),
+                    if (_isListening) ...[
+                      const SizedBox(width: 10),
+                      _buildPulsingDot(),
+                    ],
+                  ],
+                ),
+                Text(
+                  'Real-time speech to text',
+                  style: AppTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: _clearTranscription,
+            icon: const Icon(Icons.delete_outline_rounded),
+            style: IconButton.styleFrom(
+              backgroundColor: AppTheme.backgroundSecondary,
+            ),
+          ),
         ],
       ),
-      actions: [
-        IconButton(
-          icon: const Icon(Icons.delete_outline, color: Colors.white70),
-          onPressed: _clearTranscription,
-          tooltip: 'Clear',
-        ),
-        IconButton(
-          icon: const Icon(Icons.person_add, color: Colors.white70),
-          onPressed: () => Navigator.pushNamed(context, '/voice-training'),
-          tooltip: 'Add Voice',
-        ),
-      ],
     );
   }
 
   Widget _buildPulsingDot() {
-    return Container(
-      width: 12,
-      height: 12,
-      decoration: const BoxDecoration(
-        color: Colors.redAccent,
-        shape: BoxShape.circle,
-      ),
-    ).animate(onPlay: (c) => c.repeat())
-      .fadeIn(duration: 500.ms)
-      .then()
-      .fadeOut(duration: 500.ms);
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, child) {
+        return Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: AppTheme.error.withOpacity(0.6 + (_pulseController.value * 0.4)),
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.error.withOpacity(0.4),
+                blurRadius: 8,
+                spreadRadius: 2 * _pulseController.value,
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
-  Widget _buildHeader() {
-    final profileCount = _speakerService.profiles.where((p) => p.isEnrolled).length;
-    
+  Widget _buildStatusBar() {
+    final profileCount =
+        _speakerService.profiles.where((p) => p.isEnrolled).length;
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
-          // Connection status
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: _isConnected 
-                  ? Colors.green.withOpacity(0.2) 
-                  : Colors.grey.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: _isConnected ? Colors.greenAccent : Colors.grey,
-                    shape: BoxShape.circle,
-                  ),
+          // Language Selector
+          Expanded(
+            child: GestureDetector(
+              onTap: _isListening ? null : _showLanguageSelector,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundSecondary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                  border: Border.all(color: AppTheme.borderMedium),
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  _isConnected ? 'Azure Connected' : 'Offline',
-                  style: TextStyle(
-                    color: _isConnected ? Colors.greenAccent : Colors.grey,
-                    fontSize: 12,
-                  ),
+                child: Row(
+                  children: [
+                    Text(
+                      _languages.firstWhere(
+                              (l) => l['code'] == _selectedLanguage)['flag'] ??
+                          '🌐',
+                      style: const TextStyle(fontSize: 18),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        _languages.firstWhere(
+                                (l) => l['code'] == _selectedLanguage)['name'] ??
+                            'English',
+                        style: AppTheme.labelLarge,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      color: _isListening
+                          ? AppTheme.textDisabled
+                          : AppTheme.textSecondary,
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-          
-          const Spacer(),
-          
-          // Voice profiles count
+          const SizedBox(width: 12),
+          // Voice Profiles Badge
           GestureDetector(
             onTap: () => Navigator.pushNamed(context, '/voice-training'),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: profileCount > 0 
-                    ? Colors.blue.withOpacity(0.2)
-                    : Colors.orange.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+                color: profileCount > 0
+                    ? AppTheme.primary.withOpacity(0.1)
+                    : AppTheme.warning.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                border: Border.all(
+                  color: profileCount > 0
+                      ? AppTheme.primary.withOpacity(0.3)
+                      : AppTheme.warning.withOpacity(0.3),
+                ),
               ),
               child: Row(
-                mainAxisSize: MainAxisSize.min,
                 children: [
                   Icon(
-                    Icons.record_voice_over,
-                    color: profileCount > 0 ? Colors.blue : Colors.orange,
-                    size: 16,
+                    Icons.record_voice_over_rounded,
+                    size: 18,
+                    color:
+                        profileCount > 0 ? AppTheme.primary : AppTheme.warning,
                   ),
-                  const SizedBox(width: 4),
+                  const SizedBox(width: 6),
                   Text(
-                    profileCount > 0 ? '$profileCount voices' : 'Add voices',
-                    style: TextStyle(
-                      color: profileCount > 0 ? Colors.blue : Colors.orange,
-                      fontSize: 12,
+                    profileCount > 0 ? '$profileCount' : '+',
+                    style: AppTheme.labelLarge.copyWith(
+                      color: profileCount > 0
+                          ? AppTheme.primary
+                          : AppTheme.warning,
                     ),
                   ),
                 ],
@@ -420,53 +453,67 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
     );
   }
 
-  Widget _buildLanguageSelector() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Row(
-        children: [
-          const Icon(Icons.language, color: Colors.white70, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: DropdownButton<String>(
-                value: _selectedLanguage,
-                isExpanded: true,
-                dropdownColor: const Color(0xFF1C2136),
-                underline: const SizedBox(),
-                style: const TextStyle(color: Colors.white),
-                items: _languages.map((lang) {
-                  return DropdownMenuItem(
-                    value: lang['code'],
-                    child: Text(lang['name']!),
-                  );
-                }).toList(),
-                onChanged: _isListening ? null : (value) {
-                  setState(() => _selectedLanguage = value!);
-                },
-              ),
-            ),
-          ),
-        ],
+  void _showLanguageSelector() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.backgroundSecondary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.borderLight,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Text('Select Language', style: AppTheme.headlineMedium),
+              const SizedBox(height: 16),
+              ..._languages.map((lang) => ListTile(
+                    onTap: () {
+                      setState(() => _selectedLanguage = lang['code']!);
+                      Navigator.pop(context);
+                    },
+                    leading: Text(lang['flag']!,
+                        style: const TextStyle(fontSize: 24)),
+                    title: Text(lang['name']!, style: AppTheme.labelLarge),
+                    trailing: _selectedLanguage == lang['code']
+                        ? const Icon(Icons.check_circle,
+                            color: AppTheme.primary)
+                        : null,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                    ),
+                  )),
+              const SizedBox(height: 16),
+            ],
+          ),
+        );
+      },
     );
   }
 
   Widget _buildTranscriptArea() {
     return Container(
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(16),
+        color: AppTheme.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppTheme.radiusXL),
         border: Border.all(
           color: _isListening
-              ? Colors.cyanAccent.withOpacity(0.3)
-              : Colors.white.withOpacity(0.1),
+              ? AppTheme.accent.withOpacity(0.3)
+              : AppTheme.borderMedium,
         ),
       ),
       child: _transcriptEntries.isEmpty && _partialText.isEmpty
@@ -476,65 +523,66 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
   }
 
   Widget _buildEmptyState() {
-    final hasProfiles = _speakerService.profiles.any((p) => p.isEnrolled);
-    
     return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.chat_bubble_outline,
-            size: 64,
-            color: Colors.white.withOpacity(0.2),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            _isListening
-                ? 'Listening...\nSpeak now'
-                : 'Tap the microphone to start\nSpeaker names will appear here',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
-              fontSize: 16,
-            ),
-          ),
-          if (!hasProfiles) ...[
-            const SizedBox(height: 24),
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: Colors.orange.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+                color: AppTheme.backgroundTertiary,
+                shape: BoxShape.circle,
               ),
-              child: Column(
-                children: [
-                  const Icon(Icons.info_outline, color: Colors.orange),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'No voice profiles yet',
-                    style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Add family voices to see who is speaking',
-                    style: TextStyle(color: Colors.orange.withOpacity(0.8), fontSize: 12),
-                  ),
-                ],
+              child: Icon(
+                _isListening
+                    ? Icons.hearing_rounded
+                    : Icons.chat_bubble_outline_rounded,
+                size: 48,
+                color: AppTheme.textTertiary,
               ),
             ),
-            const SizedBox(height: 12),
-            ElevatedButton.icon(
-              onPressed: () => Navigator.pushNamed(context, '/voice-training'),
-              icon: const Icon(Icons.person_add, size: 18),
-              label: const Text('Add Voice Profile'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                foregroundColor: Colors.white,
-              ),
+            const SizedBox(height: 24),
+            Text(
+              _isListening ? 'Listening...' : 'Start Recording',
+              style: AppTheme.headlineSmall,
             ),
+            const SizedBox(height: 8),
+            Text(
+              _isListening
+                  ? 'Speak now and your words will appear here'
+                  : 'Tap the microphone button to begin transcription',
+              textAlign: TextAlign.center,
+              style: AppTheme.bodyMedium,
+            ),
+            if (!_isListening) ...[
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: AppTheme.info.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                  border: Border.all(color: AppTheme.info.withOpacity(0.2)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lightbulb_outline,
+                        color: AppTheme.info, size: 20),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Add voice profiles to identify who is speaking',
+                        style:
+                            AppTheme.bodySmall.copyWith(color: AppTheme.info),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -552,7 +600,7 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
             isPartial: true,
           );
         }
-        
+
         final entry = _transcriptEntries[index];
         return _buildTranscriptBubble(
           text: entry.text,
@@ -570,11 +618,10 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
     bool isPartial = false,
   }) {
     final isKnown = speaker?.identified ?? false;
-    final name = speaker?.personName ?? 'Unknown';
+    final name = speaker?.personName ?? 'Speaker';
     final confidence = speaker?.confidence ?? 0.0;
-    
-    // Get emoji for speaker
-    String emoji = '❓';
+
+    String emoji = '👤';
     if (isKnown) {
       final profile = _speakerService.profiles.firstWhere(
         (p) => p.personName == name,
@@ -582,58 +629,59 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
       );
       emoji = profile.emoji ?? '👤';
     }
-    
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Speaker avatar
+          // Avatar
           Container(
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
               color: isKnown
-                  ? Colors.blue.withOpacity(0.2)
-                  : Colors.grey.withOpacity(0.2),
+                  ? AppTheme.primary.withOpacity(0.15)
+                  : AppTheme.backgroundTertiary,
               shape: BoxShape.circle,
+              border: Border.all(
+                color: isKnown
+                    ? AppTheme.primary.withOpacity(0.3)
+                    : AppTheme.borderMedium,
+              ),
             ),
             child: Center(
-              child: Text(emoji, style: const TextStyle(fontSize: 20)),
+              child: Text(emoji, style: const TextStyle(fontSize: 22)),
             ),
           ),
-          
           const SizedBox(width: 12),
-          
-          // Message content
+          // Content
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Speaker name and confidence
                 Row(
                   children: [
                     Text(
                       name,
-                      style: TextStyle(
-                        color: isKnown ? Colors.blue : Colors.grey,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
+                      style: AppTheme.labelLarge.copyWith(
+                        color: isKnown ? AppTheme.primary : AppTheme.textSecondary,
                       ),
                     ),
                     if (isKnown && confidence > 0) ...[
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: _getConfidenceColor(confidence).withOpacity(0.2),
-                          borderRadius: BorderRadius.circular(8),
+                          color: _getConfidenceColor(confidence).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
                           '${(confidence * 100).round()}%',
-                          style: TextStyle(
+                          style: AppTheme.bodySmall.copyWith(
                             color: _getConfidenceColor(confidence),
-                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
                       ),
@@ -642,34 +690,28 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
                     if (timestamp != null)
                       Text(
                         '${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.3),
-                          fontSize: 10,
-                        ),
+                        style: AppTheme.bodySmall,
                       ),
                   ],
                 ),
-                
-                const SizedBox(height: 4),
-                
-                // Text content
+                const SizedBox(height: 6),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: isPartial
-                        ? Colors.white.withOpacity(0.03)
-                        : Colors.white.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
+                        ? AppTheme.backgroundTertiary.withOpacity(0.5)
+                        : AppTheme.backgroundTertiary,
+                    borderRadius: BorderRadius.circular(AppTheme.radiusMD),
                   ),
                   child: Text(
                     text,
-                    style: TextStyle(
+                    style: AppTheme.bodyLarge.copyWith(
                       color: isPartial
-                          ? Colors.white.withOpacity(0.5)
-                          : Colors.white,
-                      fontSize: 16,
-                      fontStyle: isPartial ? FontStyle.italic : FontStyle.normal,
-                      height: 1.4,
+                          ? AppTheme.textTertiary
+                          : AppTheme.textPrimary,
+                      fontStyle:
+                          isPartial ? FontStyle.italic : FontStyle.normal,
+                      height: 1.5,
                     ),
                   ),
                 ),
@@ -682,104 +724,79 @@ class _EnhancedTranscriptionScreenState extends State<EnhancedTranscriptionScree
   }
 
   Color _getConfidenceColor(double confidence) {
-    if (confidence >= 0.85) return Colors.greenAccent;
-    if (confidence >= 0.70) return Colors.blue;
-    return Colors.orange;
+    if (confidence >= 0.85) return AppTheme.success;
+    if (confidence >= 0.70) return AppTheme.info;
+    return AppTheme.warning;
   }
 
   Widget _buildControlPanel() {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: AppTheme.backgroundSecondary,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, -2),
+          ),
+        ],
       ),
       child: SafeArea(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Sound training button
-            _buildControlButton(
-              icon: Icons.music_note,
-              label: 'Sounds',
-              onTap: () => Navigator.pushNamed(context, '/sound-training'),
-            ),
-            
-            // Main mic button
+            // Mic Button
             GestureDetector(
               onTap: _toggleListening,
-              child: Container(
-                width: 80,
-                height: 80,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: _isListening
-                        ? [Colors.redAccent, Colors.red.shade700]
-                        : [Colors.cyanAccent, Colors.blue],
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: (_isListening ? Colors.redAccent : Colors.cyanAccent)
-                          .withOpacity(0.4),
-                      blurRadius: 20,
-                      spreadRadius: 2,
+              child: AnimatedBuilder(
+                animation: _pulseController,
+                builder: (context, child) {
+                  final scale =
+                      _isListening ? 1.0 + (_pulseController.value * 0.05) : 1.0;
+                  return Transform.scale(
+                    scale: scale,
+                    child: Container(
+                      width: 80,
+                      height: 80,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: _isListening
+                            ? AppTheme.dangerGradient
+                            : AppTheme.accentGradient,
+                        boxShadow: [
+                          BoxShadow(
+                            color: (_isListening
+                                    ? AppTheme.error
+                                    : AppTheme.accent)
+                                .withOpacity(0.4),
+                            blurRadius: 24,
+                            spreadRadius: 4,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        _isListening ? Icons.stop_rounded : Icons.mic_rounded,
+                        color: Colors.white,
+                        size: 36,
+                      ),
                     ),
-                  ],
-                ),
-                child: Icon(
-                  _isListening ? Icons.stop : Icons.mic,
-                  color: Colors.white,
-                  size: 36,
-                ),
+                  );
+                },
               ),
             ),
-            
-            // Voice training button
-            _buildControlButton(
-              icon: Icons.person_add,
-              label: 'Voices',
-              onTap: () => Navigator.pushNamed(context, '/voice-training'),
+            const SizedBox(height: 12),
+            Text(
+              _isListening ? 'Tap to stop' : 'Tap to start',
+              style: AppTheme.bodySmall,
             ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildControlButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 50,
-            height: 50,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white70, size: 24),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withOpacity(0.7),
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
-
 
 /// Transcript entry with speaker info
 class TranscriptEntry {

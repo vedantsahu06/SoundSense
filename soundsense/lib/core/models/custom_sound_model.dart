@@ -1,5 +1,3 @@
-import 'dart:typed_data';
-
 /// Model for custom trained sounds
 class CustomSound {
   final String id;

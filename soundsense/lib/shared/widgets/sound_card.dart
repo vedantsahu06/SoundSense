@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 
 class SoundCard extends StatelessWidget {
   final String soundName;
@@ -17,109 +18,95 @@ class SoundCard extends StatelessWidget {
   Color _getPriorityColor() {
     switch (priority) {
       case 'critical':
-        return const Color(0xFFFF4757);  // Red
+        return AppTheme.soundCritical;
       case 'important':
-        return const Color(0xFFFFA502);  // Orange
+        return AppTheme.soundImportant;
       default:
-        return const Color(0xFF2ED573);  // Green
+        return AppTheme.soundNormal;
     }
   }
 
   IconData _getSoundIcon() {
-    switch (soundName.toLowerCase()) {
-      case 'car horn':
-        return Icons.directions_car;
-      case 'siren':
-        return Icons.emergency;
-      case 'dog bark':
-        return Icons.pets;
-      case 'doorbell':
-        return Icons.doorbell;
-      case 'baby cry':
-        return Icons.child_care;
-      case 'phone ring':
-        return Icons.phone_android;
-      case 'music':
-        return Icons.music_note;
-      case 'speech':
-        return Icons.record_voice_over;
-      default:
-        return Icons.hearing;
-    }
+    final name = soundName.toLowerCase();
+    if (name.contains('car') || name.contains('horn')) return Icons.directions_car_rounded;
+    if (name.contains('siren') || name.contains('alarm')) return Icons.emergency_rounded;
+    if (name.contains('dog') || name.contains('cat') || name.contains('bird')) return Icons.pets_rounded;
+    if (name.contains('doorbell') || name.contains('knock')) return Icons.doorbell_rounded;
+    if (name.contains('baby') || name.contains('cry')) return Icons.child_care_rounded;
+    if (name.contains('phone') || name.contains('ring')) return Icons.phone_android_rounded;
+    if (name.contains('music') || name.contains('singing')) return Icons.music_note_rounded;
+    if (name.contains('speech') || name.contains('talk')) return Icons.record_voice_over_rounded;
+    if (name.contains('fire')) return Icons.local_fire_department_rounded;
+    if (name.contains('water')) return Icons.water_drop_rounded;
+    return Icons.hearing_rounded;
   }
 
   @override
   Widget build(BuildContext context) {
+    final color = _getPriorityColor();
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.all(16),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: const Color(0xFF16213E),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: _getPriorityColor(),
-            width: 2,
-          ),
+          color: AppTheme.backgroundSecondary,
+          borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+          border: Border.all(color: color.withOpacity(0.3), width: 1),
         ),
         child: Row(
           children: [
-            // Sound Icon
+            // Icon
             Container(
-              width: 50,
-              height: 50,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
-                color: _getPriorityColor().withOpacity(0.2),
-                borderRadius: BorderRadius.circular(12),
+                color: color.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
               ),
-              child: Icon(
-                _getSoundIcon(),
-                color: _getPriorityColor(),
-                size: 28,
-              ),
+              child: Icon(_getSoundIcon(), color: color, size: 26),
             ),
-            const SizedBox(width: 16),
-            // Sound Info
+            const SizedBox(width: 14),
+            // Info
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     soundName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: AppTheme.labelLarge,
+                    overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 4),
-                  Text(
-                    '${(confidence * 100).toInt()}% confident',
-                    style: TextStyle(
-                      color: Colors.grey[400],
-                      fontSize: 14,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          priority.toUpperCase(),
+                          style: AppTheme.bodySmall.copyWith(
+                            color: color,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        '${(confidence * 100).toInt()}%',
+                        style: AppTheme.bodySmall,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-            // Priority Badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: _getPriorityColor(),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                priority.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
+            Icon(Icons.chevron_right_rounded, color: AppTheme.textTertiary),
           ],
         ),
       ),

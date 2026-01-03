@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:lottie/lottie.dart';
-import 'package:flutter_animate/flutter_animate.dart';
-import '../../core/services/animation_service.dart';
+import '../../core/theme/app_theme.dart';
 
-class CriticalAlert extends StatefulWidget {
+class CriticalSoundAlert extends StatefulWidget {
   final String soundName;
   final double confidence;
   final VoidCallback onDismiss;
 
-  const CriticalAlert({
+  const CriticalSoundAlert({
     super.key,
     required this.soundName,
     required this.confidence,
@@ -17,229 +15,197 @@ class CriticalAlert extends StatefulWidget {
   });
 
   @override
-  State<CriticalAlert> createState() => _CriticalAlertState();
+  State<CriticalSoundAlert> createState() => _CriticalSoundAlertState();
 }
 
-class _CriticalAlertState extends State<CriticalAlert>
+class _CriticalSoundAlertState extends State<CriticalSoundAlert>
     with TickerProviderStateMixin {
   late AnimationController _pulseController;
-  late AnimationController _flashController;
+  late AnimationController _slideController;
+  late Animation<double> _pulseAnimation;
+  late Animation<Offset> _slideAnimation;
 
   @override
   void initState() {
     super.initState();
-    
-    // Continuous vibration
-    _startVibration();
-    
+    // Haptic feedback
+    HapticFeedback.heavyImpact();
+
     // Pulse animation
     _pulseController = AnimationController(
-      duration: const Duration(milliseconds: 500),
+      duration: const Duration(milliseconds: 600),
       vsync: this,
     )..repeat(reverse: true);
-    
-    // Flash animation
-    _flashController = AnimationController(
+
+    _pulseAnimation = Tween<double>(begin: 1.0, end: 1.05).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+
+    // Slide animation
+    _slideController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
-    )..repeat(reverse: true);
-  }
+    )..forward();
 
-  void _startVibration() async {
-    for (int i = 0; i < 10; i++) {
-      await HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 300));
-      if (!mounted) break;
-    }
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, -1),
+      end: Offset.zero,
+    ).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeOut),
+    );
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
-    _flashController.dispose();
+    _slideController.dispose();
     super.dispose();
+  }
+
+  IconData _getAlertIcon() {
+    final name = widget.soundName.toLowerCase();
+    if (name.contains('siren') || name.contains('alarm') || name.contains('emergency')) {
+      return Icons.emergency_rounded;
+    }
+    if (name.contains('car') || name.contains('horn') || name.contains('vehicle')) {
+      return Icons.directions_car_rounded;
+    }
+    if (name.contains('fire')) {
+      return Icons.local_fire_department_rounded;
+    }
+    if (name.contains('smoke')) {
+      return Icons.smoke_free_rounded;
+    }
+    if (name.contains('scream') || name.contains('shout')) {
+      return Icons.campaign_rounded;
+    }
+    return Icons.warning_amber_rounded;
   }
 
   @override
   Widget build(BuildContext context) {
-    final emoji = AnimationService.getEmoji(widget.soundName);
-    final description = AnimationService.getDescription(
-      widget.soundName, 
-      widget.confidence, 
-      'critical'
-    );
-    final animationPath = AnimationService.getAnimationPath(widget.soundName);
-
-    return Scaffold(
-      body: AnimatedBuilder(
-        animation: _flashController,
-        builder: (context, child) {
-          return Container(
-            width: double.infinity,
-            height: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color.lerp(
-                    const Color(0xFF8B0000),
-                    const Color(0xFFFF4757),
-                    _flashController.value,
-                  )!,
-                  const Color(0xFF1A1A2E),
-                ],
+    return SlideTransition(
+      position: _slideAnimation,
+      child: ScaleTransition(
+        scale: _pulseAnimation,
+        child: Container(
+          margin: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            gradient: AppTheme.dangerGradient,
+            borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.error.withOpacity(0.4),
+                blurRadius: 20,
+                spreadRadius: 2,
               ),
-            ),
-            child: child,
-          );
-        },
-        child: SafeArea(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Warning Icon
-              AnimatedBuilder(
-                animation: _pulseController,
-                builder: (context, child) {
-                  return Transform.scale(
-                    scale: 1.0 + (_pulseController.value * 0.2),
-                    child: child,
-                  );
-                },
-                child: Container(
-                  width: 120,
-                  height: 120,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF4757).withOpacity(0.3),
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: const Color(0xFFFF4757),
-                      width: 4,
-                    ),
-                  ),
-                  child: const Icon(
-                    Icons.warning_rounded,
-                    color: Color(0xFFFF4757),
-                    size: 64,
-                  ),
-                ),
-              ),
-              
-              const SizedBox(height: 24),
-              
-              // ALERT text
-              const Text(
-                '⚠️ ALERT ⚠️',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 4,
-                ),
-              ).animate(onPlay: (c) => c.repeat(reverse: true))
-                  .tint(color: const Color(0xFFFF4757), duration: 500.ms),
-              
-              const SizedBox(height: 32),
-              
-              // Animation
-              Container(
-                width: 180,
-                height: 180,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Lottie.asset(
-                  animationPath,
-                  fit: BoxFit.contain,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Center(
-                      child: Text(
-                        emoji,
-                        style: const TextStyle(fontSize: 80),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.2),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          _getAlertIcon(),
+                          color: Colors.white,
+                          size: 28,
+                        ),
                       ),
-                    );
-                  },
-                ),
-              ).animate()
-                  .scale(duration: 300.ms, curve: Curves.elasticOut),
-              
-              const SizedBox(height: 24),
-              
-              // Sound Name
-              Text(
-                widget.soundName.toUpperCase(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 2,
-                ),
-                textAlign: TextAlign.center,
-              ).animate().fadeIn().slideY(begin: 0.5),
-              
-              const SizedBox(height: 16),
-              
-              // Description
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 32),
-                child: Text(
-                  description,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 18,
-                    height: 1.4,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ).animate().fadeIn(delay: 200.ms),
-              
-              const SizedBox(height: 48),
-              
-              // Dismiss Button
-              GestureDetector(
-                onTap: widget.onDismiss,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 48,
-                    vertical: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.white.withOpacity(0.3),
-                        blurRadius: 20,
-                        spreadRadius: 2,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '⚠️ CRITICAL ALERT',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              widget.soundName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  child: const Text(
-                    'TAP TO DISMISS',
-                    style: TextStyle(
-                      color: Color(0xFF1A1A2E),
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 2,
+                  const SizedBox(height: 16),
+                  // Confidence bar
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Confidence',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        Text(
+                          '${(widget.confidence * 100).toInt()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ).animate(onPlay: (c) => c.repeat(reverse: true))
-                  .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 800.ms),
-              
-              const SizedBox(height: 24),
-              
-              // Confidence
-              Text(
-                'Confidence: ${(widget.confidence * 100).toInt()}%',
-                style: TextStyle(
-                  color: Colors.grey[400],
-                  fontSize: 14,
-                ),
+                  const SizedBox(height: 16),
+                  // Dismiss button
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: widget.onDismiss,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppTheme.error,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                        ),
+                      ),
+                      child: const Text(
+                        'DISMISS ALERT',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ),

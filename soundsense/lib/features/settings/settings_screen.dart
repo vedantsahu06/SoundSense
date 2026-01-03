@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/theme/app_theme.dart';
 import '../../core/services/settings_service.dart';
+import '../sos/emergency_contacts_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -14,315 +16,418 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF1A1A2E),
-      appBar: AppBar(
-        title: const Text(
-          'Settings',
-          style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
-        ),
-        backgroundColor: const Color(0xFF16213E),
-        iconTheme: const IconThemeData(color: Colors.white),
-        centerTitle: true,
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // Sound Alerts Section
-          _buildSectionHeader('Sound Alerts'),
-          _buildSwitchTile(
-            'Critical Sounds',
-            'Sirens, car horns, alarms',
-            Icons.warning_amber,
-            const Color(0xFFFF4757),
-            _settings.criticalAlerts,
-            (value) async {
-              await _settings.setCriticalAlerts(value);
-              setState(() {});
-            },
-          ),
-          _buildSwitchTile(
-            'Important Sounds',
-            'Doorbell, dog bark, baby cry',
-            Icons.notification_important,
-            const Color(0xFFFFA502),
-            _settings.importantAlerts,
-            (value) async {
-              await _settings.setImportantAlerts(value);
-              setState(() {});
-            },
-          ),
-          _buildSwitchTile(
-            'Normal Sounds',
-            'Music, speech, background noise',
-            Icons.volume_up,
-            const Color(0xFF2ED573),
-            _settings.normalAlerts,
-            (value) async {
-              await _settings.setNormalAlerts(value);
-              setState(() {});
-            },
-          ),
-
-          const SizedBox(height: 24),
-
-          // Vibration Section
-          _buildSectionHeader('Vibration'),
-          _buildSwitchTile(
-            'Enable Vibration',
-            'Vibrate when sounds are detected',
-            Icons.vibration,
-            const Color(0xFF00D9FF),
-            _settings.vibrationEnabled,
-            (value) async {
-              await _settings.setVibrationEnabled(value);
-              setState(() {});
-            },
-          ),
-          if (_settings.vibrationEnabled) ...[
-            const SizedBox(height: 8),
-            _buildDropdownTile(
-              'Vibration Intensity',
-              Icons.speed,
-              _settings.vibrationIntensity,
-              ['Low', 'Medium', 'High'],
-              (value) async {
-                await _settings.setVibrationIntensity(value!);
-                setState(() {});
-              },
-            ),
-          ],
-
-          const SizedBox(height: 24),
-
-          // Sensitivity Section
-          _buildSectionHeader('Detection Sensitivity'),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFF16213E),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      backgroundColor: AppTheme.backgroundPrimary,
+      body: SafeArea(
+        child: CustomScrollView(
+          slivers: [
+            // Header
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Sensitivity',
-                      style: TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                    Text(
-                      _getSensitivityLabel(),
-                      style: const TextStyle(
-                        color: Color(0xFF2ED573),
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
+                    Text('Settings', style: AppTheme.displaySmall),
+                    const SizedBox(height: 4),
+                    Text('Customize your experience',
+                        style: AppTheme.bodyMedium),
                   ],
-                ),
-                const SizedBox(height: 8),
-                Slider(
-                  value: _settings.sensitivity,
-                  onChanged: (value) async {
-                    await _settings.setSensitivity(value);
-                    setState(() {});
-                  },
-                  activeColor: const Color(0xFF2ED573),
-                  inactiveColor: Colors.grey[700],
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('Low', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                    Text('High', style: TextStyle(color: Colors.grey[500], fontSize: 12)),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Threshold: ${_settings.getDecibelThreshold().toStringAsFixed(0)} dB',
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // About Section
-          _buildSectionHeader('About'),
-          _buildInfoTile('App Version', '1.0.0', Icons.info_outline),
-          const SizedBox(height: 8),
-          _buildInfoTile('AI Model', 'YAMNet (521 sounds)', Icons.psychology),
-          const SizedBox(height: 8),
-          _buildInfoTile('Developer', 'Team SoundSense', Icons.code),
-
-          const SizedBox(height: 32),
-
-          // Reset Button
-          Center(
-            child: ElevatedButton.icon(
-              onPressed: _resetSettings,
-              icon: const Icon(Icons.refresh, color: Colors.white),
-              label: const Text('Reset to Defaults', style: TextStyle(color: Colors.white)),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFFF4757),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
-          ),
 
-          const SizedBox(height: 16),
-        ],
+            // Sound Alerts Section
+            SliverToBoxAdapter(child: _buildSectionHeader('Sound Alerts')),
+            SliverToBoxAdapter(
+              child: _buildSettingsCard([
+                _buildSwitchTile(
+                  title: 'Critical Sounds',
+                  subtitle: 'Sirens, car horns, alarms',
+                  icon: Icons.warning_amber_rounded,
+                  color: AppTheme.soundCritical,
+                  value: _settings.criticalAlerts,
+                  onChanged: (value) async {
+                    await _settings.setCriticalAlerts(value);
+                    setState(() {});
+                  },
+                ),
+                _buildDivider(),
+                _buildSwitchTile(
+                  title: 'Important Sounds',
+                  subtitle: 'Doorbell, dog bark, baby cry',
+                  icon: Icons.notification_important_rounded,
+                  color: AppTheme.soundImportant,
+                  value: _settings.importantAlerts,
+                  onChanged: (value) async {
+                    await _settings.setImportantAlerts(value);
+                    setState(() {});
+                  },
+                ),
+                _buildDivider(),
+                _buildSwitchTile(
+                  title: 'Normal Sounds',
+                  subtitle: 'Music, speech, background noise',
+                  icon: Icons.volume_up_rounded,
+                  color: AppTheme.soundNormal,
+                  value: _settings.normalAlerts,
+                  onChanged: (value) async {
+                    await _settings.setNormalAlerts(value);
+                    setState(() {});
+                  },
+                ),
+              ]),
+            ),
+
+            // Vibration Section
+            SliverToBoxAdapter(child: _buildSectionHeader('Vibration')),
+            SliverToBoxAdapter(
+              child: _buildSettingsCard([
+                _buildSwitchTile(
+                  title: 'Enable Vibration',
+                  subtitle: 'Vibrate when sounds are detected',
+                  icon: Icons.vibration_rounded,
+                  color: AppTheme.primary,
+                  value: _settings.vibrationEnabled,
+                  onChanged: (value) async {
+                    await _settings.setVibrationEnabled(value);
+                    setState(() {});
+                  },
+                ),
+                if (_settings.vibrationEnabled) ...[
+                  _buildDivider(),
+                  _buildIntensitySelector(),
+                ],
+              ]),
+            ),
+
+            // Sensitivity Section
+            SliverToBoxAdapter(child: _buildSectionHeader('Detection')),
+            SliverToBoxAdapter(
+              child: _buildSettingsCard([
+                _buildSensitivitySlider(),
+              ]),
+            ),
+
+            // Emergency Section
+            SliverToBoxAdapter(child: _buildSectionHeader('Emergency')),
+            SliverToBoxAdapter(
+              child: _buildSettingsCard([
+                _buildNavigationTile(
+                  title: 'Emergency Contacts',
+                  subtitle: 'Manage SOS contacts',
+                  icon: Icons.emergency_rounded,
+                  color: AppTheme.error,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const EmergencyContactsScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ]),
+            ),
+
+            // About Section
+            SliverToBoxAdapter(child: _buildSectionHeader('About')),
+            SliverToBoxAdapter(
+              child: _buildSettingsCard([
+                _buildInfoTile(
+                  title: 'Version',
+                  value: '1.0.0',
+                  icon: Icons.info_outline_rounded,
+                ),
+                _buildDivider(),
+                _buildInfoTile(
+                  title: 'AI Model',
+                  value: 'YAMNet',
+                  icon: Icons.psychology_rounded,
+                ),
+                _buildDivider(),
+                _buildInfoTile(
+                  title: 'Speech Service',
+                  value: 'Azure Cognitive',
+                  icon: Icons.cloud_rounded,
+                ),
+              ]),
+            ),
+
+            const SliverToBoxAdapter(child: SizedBox(height: 100)),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildSectionHeader(String title) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
       child: Text(
         title,
-        style: const TextStyle(
-          color: Color(0xFF2ED573),
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1,
-        ),
+        style: AppTheme.labelLarge.copyWith(color: AppTheme.textTertiary),
       ),
     );
   }
 
-  Widget _buildSwitchTile(
-    String title,
-    String subtitle,
-    IconData icon,
-    Color iconColor,
-    bool value,
-    Function(bool) onChanged,
-  ) {
+  Widget _buildSettingsCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: const Color(0xFF16213E),
-        borderRadius: BorderRadius.circular(12),
+        color: AppTheme.backgroundSecondary,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+        border: Border.all(color: AppTheme.borderMedium),
       ),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _buildDivider() {
+    return const Divider(
+      height: 1,
+      thickness: 1,
+      color: AppTheme.borderMedium,
+      indent: 60,
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(AppTheme.radiusMD),
             ),
-            child: Icon(icon, color: iconColor, size: 22),
+            child: Icon(icon, color: color, size: 22),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                Text(subtitle, style: TextStyle(color: Colors.grey[500], fontSize: 12)),
+                Text(title, style: AppTheme.labelLarge),
+                const SizedBox(height: 2),
+                Text(subtitle, style: AppTheme.bodySmall),
               ],
             ),
           ),
           Switch(
             value: value,
             onChanged: onChanged,
-            activeColor: const Color(0xFF2ED573),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildDropdownTile(
-    String title,
-    IconData icon,
-    String value,
-    List<String> options,
-    Function(String?) onChanged,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF16213E),
-        borderRadius: BorderRadius.circular(12),
+  Widget _buildNavigationTile({
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppTheme.radiusLG),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+              ),
+              child: Icon(icon, color: color, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: AppTheme.labelLarge),
+                  const SizedBox(height: 2),
+                  Text(subtitle, style: AppTheme.bodySmall),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded, color: AppTheme.textTertiary),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildInfoTile({
+    required String title,
+    required String value,
+    required IconData icon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
       child: Row(
         children: [
           Container(
-            width: 40,
-            height: 40,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF00D9FF).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(10),
+              color: AppTheme.backgroundTertiary,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMD),
             ),
-            child: Icon(icon, color: const Color(0xFF00D9FF), size: 22),
+            child: Icon(icon, color: AppTheme.textSecondary, size: 22),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
-            child: Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
+            child: Text(title, style: AppTheme.labelLarge),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A2E),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: DropdownButton<String>(
-              value: value,
-              dropdownColor: const Color(0xFF16213E),
-              style: const TextStyle(color: Colors.white),
-              underline: const SizedBox(),
-              items: options.map((String option) {
-                return DropdownMenuItem<String>(value: option, child: Text(option));
-              }).toList(),
-              onChanged: onChanged,
-            ),
-          ),
+          Text(value, style: AppTheme.bodyMedium),
         ],
       ),
     );
   }
 
-  Widget _buildInfoTile(String title, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF16213E),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
+  Widget _buildIntensitySelector() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: Colors.grey[500], size: 22),
-          const SizedBox(width: 12),
-          Text(title, style: const TextStyle(color: Colors.white, fontSize: 16)),
-          const Spacer(),
-          Text(value, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.backgroundTertiary,
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                ),
+                child: const Icon(Icons.speed_rounded,
+                    color: AppTheme.textSecondary, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Text('Intensity', style: AppTheme.labelLarge),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: ['Low', 'Medium', 'High'].map((intensity) {
+              final isSelected = _settings.vibrationIntensity == intensity;
+              return Expanded(
+                child: GestureDetector(
+                  onTap: () async {
+                    await _settings.setVibrationIntensity(intensity);
+                    setState(() {});
+                  },
+                  child: Container(
+                    margin: EdgeInsets.only(
+                        right: intensity != 'High' ? 8 : 0),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppTheme.primary
+                          : AppTheme.backgroundTertiary,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                      border: Border.all(
+                        color: isSelected
+                            ? AppTheme.primary
+                            : AppTheme.borderMedium,
+                      ),
+                    ),
+                    child: Center(
+                      child: Text(
+                        intensity,
+                        style: AppTheme.labelMedium.copyWith(
+                          color: isSelected
+                              ? Colors.white
+                              : AppTheme.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );
   }
 
-  String _getSensitivityLabel() {
-    if (_settings.sensitivity < 0.33) return 'Low';
-    if (_settings.sensitivity < 0.66) return 'Medium';
-    return 'High';
-  }
-
-  void _resetSettings() async {
-    await _settings.resetToDefaults();
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Settings reset to defaults'),
-        backgroundColor: Color(0xFF2ED573),
+  Widget _buildSensitivitySlider() {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: AppTheme.accent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusMD),
+                ),
+                child: const Icon(Icons.tune_rounded,
+                    color: AppTheme.accent, size: 22),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Detection Sensitivity', style: AppTheme.labelLarge),
+                    Text(
+                      '${(_settings.sensitivity * 100).toInt()}%',
+                      style:
+                          AppTheme.bodySmall.copyWith(color: AppTheme.accent),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 6,
+              thumbShape:
+                  const RoundSliderThumbShape(enabledThumbRadius: 10),
+            ),
+            child: Slider(
+              value: _settings.sensitivity,
+              min: 0.3,
+              max: 1.0,
+              divisions: 7,
+              onChanged: (value) async {
+                await _settings.setSensitivity(value);
+                setState(() {});
+              },
+            ),
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Less sensitive', style: AppTheme.bodySmall),
+              Text('More sensitive', style: AppTheme.bodySmall),
+            ],
+          ),
+        ],
       ),
     );
   }
